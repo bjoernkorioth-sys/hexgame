@@ -51,60 +51,114 @@ class MapEditor:
     # -------------------------------------------------------------------
     def save_preview_image(self, filename):
         """
-        Render a 300x300 preview of the current hex map and save it as PNG.
-        Overwrites existing previews.
+        Render a 300x300 preview of the current hex map with:
+
+        ✔ Real hex shapes
+        ✔ Height shading
+        ✔ Impassable tile overlay
+        ✔ Perfect centering
+
+        Saves to: maps/<mapname>.png
         """
 
+        import pygame
+        import os
+        import math
+
+        PREV_SIZE = 300
         base, ext = os.path.splitext(filename)
         out_path = os.path.join(MAPS_DIR, base + ".png")
 
-        # Create preview surface (fixed size)
-        PREV_SIZE = 300
+        # Create surface
         surf = pygame.Surface((PREV_SIZE, PREV_SIZE))
         surf.fill((25, 25, 30))
 
-        # Small camera-free rendering: no world camera, just fit whole map
-        # Compute bounding box of hexes in pixel space BEFORE scaling
-        points = []
+        # Collect all pixel-coordinates BEFORE scaling
+        pixel_centers = []
         for (q, r) in self.hexmap.terrain.keys():
             px, py = self.hexmap.hex_to_pixel(q, r)
-            points.append((px, py))
+            pixel_centers.append((px, py))
 
-        if not points:
+        if not pixel_centers:
             pygame.image.save(surf, out_path)
             return
 
-        xs = [p[0] for p in points]
-        ys = [p[1] for p in points]
+        xs = [p[0] for p in pixel_centers]
+        ys = [p[1] for p in pixel_centers]
+
         min_x, max_x = min(xs), max(xs)
         min_y, max_y = min(ys), max(ys)
 
-        width = max_x - min_x + HEX_SIZE * 2
-        height = max_y - min_y + HEX_SIZE * 2
+        map_w = max_x - min_x + HEX_SIZE * 2
+        map_h = max_y - min_y + HEX_SIZE * 2
 
-        # Compute scale so map fits inside preview
-        scale = min(PREV_SIZE / width, PREV_SIZE / height)
+        # Fit map in preview
+        scale = min(PREV_SIZE / map_w, PREV_SIZE / map_h)
 
-        # Transform hex coordinates to preview surface space
+        # Perfect centering
+        offset_x = (PREV_SIZE - map_w * scale) / 2
+        offset_y = (PREV_SIZE - map_h * scale) / 2
+
         def to_preview(px, py):
-            px -= min_x
-            py -= min_y
-            return int(px * scale), int(py * scale)
+            px = (px - min_x) * scale + offset_x
+            py = (py - min_y) * scale + offset_y
+            return int(px), int(py)
 
-        # Draw terrains
+        def hex_corners(px, py, size):
+            """Return pixel coords of a scaled hex."""
+            corners = []
+            for i in range(6):
+                angle = math.radians(60 * i - 30)
+                cx = px + size * math.cos(angle)
+                cy = py + size * math.sin(angle)
+                corners.append((cx, cy))
+            return corners
+
+        # Render each tile
         for (q, r), data in self.hexmap.terrain.items():
+            terr = data["type"]
+            height = data.get("height", 0)
+            imp = data.get("impassable", False)
+
+            base_color = TERRAIN_TYPES[terr]["color"]
+
+            # HEIGHT SHADING (0–10 expected)
+            # Darker for higher elevation
+            shade = max(0, min(10, height))
+            factor = 1 - shade * 0.04  # reduces brightness
+            color = (
+                int(base_color[0] * factor),
+                int(base_color[1] * factor),
+                int(base_color[2] * factor),
+            )
+
             px, py = self.hexmap.hex_to_pixel(q, r)
             sx, sy = to_preview(px, py)
+            hex_size_scaled = HEX_SIZE * scale
 
-            terr = data["type"]
-            color = TERRAIN_TYPES[terr]["color"]
+            corners = hex_corners(sx, sy, hex_size_scaled)
 
-            # Draw hex center as a filled circle (simple + readable)
-            pygame.draw.circle(surf, color, (sx, sy), int(HEX_SIZE * 0.6 * scale))
+            # Fill hex
+            pygame.draw.polygon(surf, color, corners)
 
-        # Save PNG
+            # Impassable overlay (red X)
+            if imp:
+                pygame.draw.line(
+                    surf, (200, 40, 40),
+                    corners[0], corners[3], max(1, int(hex_size_scaled * 0.15))
+                )
+                pygame.draw.line(
+                    surf, (200, 40, 40),
+                    corners[1], corners[4], max(1, int(hex_size_scaled * 0.15))
+                )
+
+            # Hex outline
+            pygame.draw.polygon(surf, (20, 20, 20), corners, 1)
+
+        # Save preview PNG
         pygame.image.save(surf, out_path)
         print("Saved preview:", out_path)
+
     
     def list_maps(self):
         files = [f for f in os.listdir(MAPS_DIR) if f.endswith(".json")]
