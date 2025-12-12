@@ -25,6 +25,7 @@ class Game:
         # Core objects
         self.camera = Camera()
         self.hexmap = HexMap(screen, self.camera)
+        self.load_chosen_map()
         self.center_camera_on_map()
 
         # --- State ---
@@ -81,6 +82,27 @@ class Game:
     # ---------------------------------------------------------
     # GAME HELPERS
     # ---------------------------------------------------------
+    def load_chosen_map(self):
+        from settings import MAPS_DIR
+        import os, json
+
+        path = os.path.join(MAPS_DIR, self.map_name)
+        if not os.path.isfile(path):
+            print(f"Map file not found: {path}")
+            return
+
+        with open(path, "r") as fh:
+            data = json.load(fh)
+
+        # apply map data to hexmap
+        self.hexmap.width = data.get("width", self.hexmap.width)
+        self.hexmap.height = data.get("height", self.hexmap.height)
+
+        for key, info in data.get("tiles", {}).items():
+            q, r = map(int, key.split(","))
+            self.hexmap.terrain[(q, r)] = info
+
+    
     def in_spawn_zone(self, player, r):
         zone = 4
         if player == 0:

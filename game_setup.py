@@ -42,13 +42,27 @@ class GameSetupScreen:
 
     def draw_preview(self, surface, x, y):
         """
-        Display map preview.
-        For now, just a gray rectangle with the name.
-        Replace with image loading later.
+        Display map preview if .png exists,
+        otherwise draw a box with the map name.
         """
-        pygame.draw.rect(surface, (70, 70, 90), (x, y, 300, 300))
-        txt = font.render(self.maps[self.map_index], True, (255, 255, 255))
-        surface.blit(txt, (x + 20, y + 20))
+        # Determine the basename without extension
+        map_file = self.maps[self.map_index]
+        base, ext = os.path.splitext(map_file)
+
+        # Try PNG preview first
+        img_path = os.path.join(MAP_FOLDER, base + ".png")
+
+        if os.path.isfile(img_path):
+            # Load and display preview
+            preview_img = pygame.image.load(img_path).convert()
+            preview_img = pygame.transform.scale(preview_img, (300, 300))
+            surface.blit(preview_img, (x, y))
+        else:
+            # No preview image → draw placeholder box
+            pygame.draw.rect(surface, (70, 70, 90), (x, y, 300, 300))
+            txt = font.render(map_file, True, (255, 255, 255))
+            surface.blit(txt, (x + 20, y + 20))
+
 
     def draw(self):
         self.screen.fill((25,25,35))

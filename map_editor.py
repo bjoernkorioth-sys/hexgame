@@ -7,6 +7,7 @@ from datetime import datetime
 from hexmap import HexMap
 from settings import WINDOW_WIDTH, WINDOW_HEIGHT, GRID_WIDTH, GRID_HEIGHT, HEX_SIZE, FPS, SIDEBAR_WIDTH as SIDEBAR_W, TERRAIN_TYPES, TERRAIN_LIST
 
+
 MAPS_DIR = "maps"
 
 TERRAIN_UI_LIST = TERRAIN_LIST  # ordered list from settings
@@ -48,6 +49,63 @@ class MapEditor:
     # -------------------------------------------------------------------
     # Saving / loading logic (unchanged)
     # -------------------------------------------------------------------
+    def save_preview_image(self, filename):
+        """
+        Render a 300x300 preview of the current hex map and save it as PNG.
+        Overwrites existing previews.
+        """
+
+        base, ext = os.path.splitext(filename)
+        out_path = os.path.join(MAPS_DIR, base + ".png")
+
+        # Create preview surface (fixed size)
+        PREV_SIZE = 300
+        surf = pygame.Surface((PREV_SIZE, PREV_SIZE))
+        surf.fill((25, 25, 30))
+
+        # Small camera-free rendering: no world camera, just fit whole map
+        # Compute bounding box of hexes in pixel space BEFORE scaling
+        points = []
+        for (q, r) in self.hexmap.terrain.keys():
+            px, py = self.hexmap.hex_to_pixel(q, r)
+            points.append((px, py))
+
+        if not points:
+            pygame.image.save(surf, out_path)
+            return
+
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+
+        width = max_x - min_x + HEX_SIZE * 2
+        height = max_y - min_y + HEX_SIZE * 2
+
+        # Compute scale so map fits inside preview
+        scale = min(PREV_SIZE / width, PREV_SIZE / height)
+
+        # Transform hex coordinates to preview surface space
+        def to_preview(px, py):
+            px -= min_x
+            py -= min_y
+            return int(px * scale), int(py * scale)
+
+        # Draw terrains
+        for (q, r), data in self.hexmap.terrain.items():
+            px, py = self.hexmap.hex_to_pixel(q, r)
+            sx, sy = to_preview(px, py)
+
+            terr = data["type"]
+            color = TERRAIN_TYPES[terr]["color"]
+
+            # Draw hex center as a filled circle (simple + readable)
+            pygame.draw.circle(surf, color, (sx, sy), int(HEX_SIZE * 0.6 * scale))
+
+        # Save PNG
+        pygame.image.save(surf, out_path)
+        print("Saved preview:", out_path)
+    
     def list_maps(self):
         files = [f for f in os.listdir(MAPS_DIR) if f.endswith(".json")]
         files.sort()
@@ -67,6 +125,9 @@ class MapEditor:
         with open(path, "w") as fh:
             json.dump(payload, fh, indent=2)
         print("Saved map:", path)
+
+        # ALSO save preview PNG
+        self.save_preview_image(filename)
 
     def load_map(self, filename):
         path = os.path.join(MAPS_DIR, filename)

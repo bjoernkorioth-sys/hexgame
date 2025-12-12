@@ -27,6 +27,8 @@ MAP_OFFSET_Y = MARGIN_TOP
 
 LOG_WIDTH = 500
 
+MAPS_DIR = "maps"
+
 # --- Final responsive window size ---
 WINDOW_WIDTH = int(
     MARGIN_LEFT +
