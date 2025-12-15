@@ -6,6 +6,7 @@ import hexmap
 class Unit:
     FONT = None  # lazy init
     TOOLTIP_FONT = None
+    
 
     CLASS_COLORS = {
         "captain": (255, 215, 0),     # gold
@@ -28,6 +29,10 @@ class Unit:
         ranged=None,
         action_points=2,
     ):
+        
+        self.cost = hasattr(self, "cost") and self.cost or 0
+        self.icon = None
+        
         # Position
         self.q = q
         self.r = r
@@ -170,6 +175,13 @@ class Unit:
 
     def is_alive(self):
         return self.hp > 0
+    
+    def load_icon(self, path):
+        try:
+            img = pygame.image.load(path).convert_alpha()
+            self.icon = pygame.transform.scale(img, (48, 48))
+        except:
+            self.icon = None
 
 # ======================================================
 # ROSTER DEFINITIONS
@@ -223,3 +235,6 @@ def create_roster(player_id):
         ),
     ]
     return roster
+
+
+

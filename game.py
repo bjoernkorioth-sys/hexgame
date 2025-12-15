@@ -9,12 +9,15 @@ from settings import (
 )
 from camera import Camera
 from hexmap import HexMap
-from unit import Unit, create_roster
+from unit import Unit
+from unit_catalog import UNIT_CATALOG
 
 
 class Game:
     def __init__(self, screen, map_name, roster):
-        self.screen = screen
+        self.screen = pygame.display.set_mode(
+            (WINDOW_WIDTH, WINDOW_HEIGHT)
+        )
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("arial", 24)
 
@@ -31,7 +34,20 @@ class Game:
         # --- State ---
         self.running = True
         self.units = []
-        self.player_units = [create_roster(i) for i in range(NUM_PLAYERS)]
+        self.player_units = []
+        for player, list_of_names in self.roster_data.items():
+            units = []
+            for name in list_of_names:
+                info = UNIT_CATALOG[name]
+                u = Unit(
+                    q=0, r=0, owner=player,
+                    **info["stats"]
+                )
+                u.cost = info["cost"]
+                u.load_icon(info["icon"])
+                units.append(u)
+            self.player_units.append(units)
+
         self.selected_unit = None
         self.reachable_tiles = set()
         self.moving = False

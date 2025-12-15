@@ -1,4 +1,7 @@
 # settings.py
+
+print("LOADED SETTINGS FROM:", __file__)
+
 import math
 
 # --- Hex and grid configuration ---
@@ -43,6 +46,31 @@ WINDOW_HEIGHT = int(
     MARGIN_BOTTOM +
     BOTTOM_UI_HEIGHT
 )
+
+
+# -------------------------------------------------------
+# SETUP SCREEN LAYOUT
+# -------------------------------------------------------
+
+SETUP_MAP_PREVIEW_SIZE = 300
+SETUP_UNIT_LIST_WIDTH = 500
+SETUP_ROSTER_WIDTH = 300
+SETUP_PANEL_GAP = 40
+SETUP_TOP_MARGIN = 100
+SETUP_BOTTOM_MARGIN = 100
+
+SETUP_WINDOW_WIDTH = (
+    40 +                              # left margin
+    SETUP_MAP_PREVIEW_SIZE +
+    SETUP_PANEL_GAP +
+    SETUP_UNIT_LIST_WIDTH +
+    SETUP_PANEL_GAP +
+    SETUP_ROSTER_WIDTH +
+    40                               # right margin
+)
+
+SETUP_WINDOW_HEIGHT = 600
+
 
 # --- Camera / frame ---
 FPS = 60
