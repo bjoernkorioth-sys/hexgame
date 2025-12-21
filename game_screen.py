@@ -233,7 +233,12 @@ class Game:
         if self.selected_unit.action_points <= 0:
             self.log(f"{self.selected_unit.unit_class} has 0 AP — turn ends.")
             self.end_turn()
-
+    
+    def handle_event(self, ev):
+        if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
+            from menu_screen import MenuScreen
+            self.next_screen = MenuScreen(self.app)
+            self.done = True
     # ---------------------------------------------------------
     # MAIN LOOP
     # ---------------------------------------------------------
@@ -345,8 +350,6 @@ class Game:
             # ------------------------------
             self.draw_ui(end_btn)
             pygame.display.flip()
-
-        pygame.quit()
 
     # ---------------------------------------------------------
     # DRAW LOGIC

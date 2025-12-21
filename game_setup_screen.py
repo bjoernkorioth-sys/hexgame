@@ -8,7 +8,7 @@ from settings import (
     SETUP_TOP_MARGIN,
     FPS
 )
-from game import Game
+from hexgame.game_screen import Game
 from unit_catalog import UNIT_CATALOG
 
 pygame.init()
@@ -262,8 +262,12 @@ class GameSetupScreen:
                     # Start game
                     if rects["start"].collidepoint((mx, my)):
                         chosen_map = self.maps[self.map_index]
-                        game = Game(self.screen, chosen_map, self.player_rosters)
-                        game.run()
-                        return
+                        from game_screen import GameScreen
+                        self.next_screen = GameScreen(
+                            self.app,
+                            chosen_map,
+                            self.player_rosters
+                        )
+                        self.done = True
 
             pygame.display.flip()
