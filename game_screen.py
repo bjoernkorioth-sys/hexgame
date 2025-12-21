@@ -1,10 +1,12 @@
-# game.py
+# game_screen.py
 import pygame
 import random
-import time
 from collections import deque
+
+from screen_base import Screen
 from settings import (
-    WINDOW_WIDTH, WINDOW_HEIGHT, FPS, NUM_PLAYERS, UNITS_PER_PLAYER,
+    WINDOW_WIDTH, WINDOW_HEIGHT,
+    NUM_PLAYERS, UNITS_PER_PLAYER,
     BOTTOM_UI_HEIGHT, LOG_WIDTH
 )
 from camera import Camera
@@ -13,12 +15,11 @@ from unit import Unit
 from unit_catalog import UNIT_CATALOG
 
 
-class Game:
-    def __init__(self, screen, map_name, roster):
-        self.screen = pygame.display.set_mode(
-            (WINDOW_WIDTH, WINDOW_HEIGHT)
-        )
-        self.clock = pygame.time.Clock()
+class GameScreen(Screen):
+    def __init__(self, app, map_name, roster):
+        super().__init__(app)
+
+        self.screen = app.screen
         self.font = pygame.font.SysFont("arial", 24)
 
         # External choices
@@ -27,22 +28,19 @@ class Game:
 
         # Core objects
         self.camera = Camera()
-        self.hexmap = HexMap(screen, self.camera)
+        self.hexmap = HexMap(self.screen, self.camera)
         self.load_chosen_map()
         self.center_camera_on_map()
 
         # --- State ---
-        self.running = True
         self.units = []
         self.player_units = []
+
         for player, list_of_names in self.roster_data.items():
             units = []
             for name in list_of_names:
                 info = UNIT_CATALOG[name]
-                u = Unit(
-                    q=0, r=0, owner=player,
-                    **info["stats"]
-                )
+                u = Unit(q=0, r=0, owner=player, **info["stats"])
                 u.cost = info["cost"]
                 u.load_icon(info["icon"])
                 units.append(u)
@@ -66,6 +64,9 @@ class Game:
         self.combat_log = []
         self.MAX_LOG_LINES = 8
 
+        # UI
+        self.end_btn = pygame.Rect(WINDOW_WIDTH - 180, 40, 140, 50)
+
     # ---------------------------------------------------------
     # INITIALIZATION
     # ---------------------------------------------------------
@@ -88,15 +89,7 @@ class Game:
         self.camera.y = (usable_h / 2) - cy
 
     # ---------------------------------------------------------
-    # LOGGING
-    # ---------------------------------------------------------
-    def log(self, text):
-        self.combat_log.insert(0, text)
-        if len(self.combat_log) > self.MAX_LOG_LINES:
-            self.combat_log.pop()
-
-    # ---------------------------------------------------------
-    # GAME HELPERS
+    # MAP LOADING
     # ---------------------------------------------------------
     def load_chosen_map(self):
         from settings import MAPS_DIR
@@ -110,7 +103,6 @@ class Game:
         with open(path, "r") as fh:
             data = json.load(fh)
 
-        # apply map data to hexmap
         self.hexmap.width = data.get("width", self.hexmap.width)
         self.hexmap.height = data.get("height", self.hexmap.height)
 
@@ -118,259 +110,129 @@ class Game:
             q, r = map(int, key.split(","))
             self.hexmap.terrain[(q, r)] = info
 
-    
-    def in_spawn_zone(self, player, r):
-        zone = 4
-        if player == 0:
-            return r < zone
-        return r >= self.hexmap.height - zone
-
-    def bfs_path(self, start, goal, blocked):
-        if start == goal:
-            return [start]
-
-        q = deque([start])
-        came = {start: None}
-
-        while q:
-            cur = q.popleft()
-            if cur == goal:
-                break
-            for n in self.hexmap.neighbors(*cur):
-                if n in came:
-                    continue
-                if n in blocked:
-                    continue
-                if not self.hexmap.is_inside_grid(*n):
-                    continue
-                came[n] = cur
-                q.append(n)
-
-        if goal not in came:
-            return []
-
-        path = []
-        c = goal
-        while c is not None:
-            path.append(c)
-            c = came[c]
-        path.reverse()
-        return path
-
-    def hex_distance(self, a, b):
-        aq, ar = a
-        bq, br = b
-        ax, az = aq, ar
-        ay = -ax - az
-        bx, bz = bq, br
-        by = -bx - bz
-        return int((abs(ax - bx) + abs(ay - by) + abs(az - bz)) / 2)
-
     # ---------------------------------------------------------
-    # COMBAT
+    # INPUT
     # ---------------------------------------------------------
-    def resolve_combat(self, attacker, defender, weapon):
-        for _ in range(weapon["attack"]):
-            hit = random.randint(1, 6)
-            self.log(f"{attacker.unit_class} rolls {hit} to hit (needs {weapon['hit']}+).")
-            if hit >= weapon["hit"]:
-                save_roll = random.randint(1, 6)
-                if save_roll > defender.save:
-                    defender.hp -= weapon["damage"]
-                    self.log(f"{attacker.unit_class} hits {defender.unit_class}! HP now {defender.hp}")
-                    if defender.hp <= 0:
-                        self.log(f"{defender.unit_class} is slain!")
-                        if defender in self.units:
-                            self.units.remove(defender)
-                        break
-                else:
-                    self.log(f"{defender.unit_class} saves successfully!")
-            else:
-                self.log(f"{attacker.unit_class} misses.")
-
-    def attack(self, attacker, defender):
-        dist = self.hex_distance((attacker.q, attacker.r), (defender.q, defender.r))
-
-        melee_range = attacker.melee.get("range", 1)
-        if dist <= melee_range and attacker.melee.get("attack", 0) > 0:
-            self.log(f"{attacker.unit_class} attacks {defender.unit_class} in melee!")
-            self.resolve_combat(attacker, defender, attacker.melee)
-            return True
-
-        if dist <= attacker.ranged.get("range", 0):
-            self.log(f"{attacker.unit_class} shoots at {defender.unit_class} (range {dist}).")
-            self.resolve_combat(attacker, defender, attacker.ranged)
-            return True
-
-        self.log("Out of range.")
-        return False
-
-    # ---------------------------------------------------------
-    # TURN LOGIC
-    # ---------------------------------------------------------
-    def end_turn(self):
-        self.selected_unit = None
-        self.reachable_tiles.clear()
-        self.moving = False
-        self.move_highlight = None
-        self.hexmap.selected_hex = None
-
-        self.player_moved[self.current_player] = False
-
-        done = all(c >= UNITS_PER_PLAYER for c in self.placed_units)
-        self.current_player = (self.current_player + 1) % NUM_PLAYERS
-
-        for u in self.units:
-            if u.owner == self.current_player and hasattr(u, "reset_actions"):
-                u.reset_actions()
-
-        if done:
-            self.placement_phase = False
-
-    def auto_end_turn(self):
-        if not self.selected_unit:
-            return
-        if self.selected_unit.action_points <= 0:
-            self.log(f"{self.selected_unit.unit_class} has 0 AP — turn ends.")
-            self.end_turn()
-    
     def handle_event(self, ev):
         if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
             from menu_screen import MenuScreen
             self.next_screen = MenuScreen(self.app)
             self.done = True
-    # ---------------------------------------------------------
-    # MAIN LOOP
-    # ---------------------------------------------------------
-    def run(self):
-        end_btn = pygame.Rect(WINDOW_WIDTH - 180, 40, 140, 50)
-
-        while self.running:
-            dt = self.clock.tick(FPS) / 1000
-            self.move_timer += dt
-
-            events = pygame.event.get()
-            keys = pygame.key.get_pressed()
-            mouse_pos = pygame.mouse.get_pos()
-
-            # Quit
-            for ev in events:
-                if ev.type == pygame.QUIT:
-                    self.running = False
-
-            # Camera
-            self.camera.handle_input(events, keys)
-
-            # ------------------------------
-            # Input Handling
-            # ------------------------------
-            if pygame.mouse.get_pressed()[0]:
-                mx, my = mouse_pos
-
-                if end_btn.collidepoint((mx, my)):
-                    if not (self.placement_phase and
-                            self.placed_units[self.current_player] < UNITS_PER_PLAYER):
-                        self.end_turn()
-
-                # Convert click to hex
-                wx, wy = self.camera.screen_to_world(mouse_pos)
-                q, r = self.hexmap.pixel_to_hex(wx, wy)
-
-                if self.hexmap.is_inside_grid(q, r):
-                    tile = (q, r)
-                    clicked_unit = next((u for u in self.units if (u.q, u.r) == tile), None)
-
-                    # Placement Phase
-                    if self.placement_phase:
-                        if self.placed_units[self.current_player] < len(self.player_units[self.current_player]):
-                            if self.in_spawn_zone(self.current_player, r):
-                                if not any((u.q, u.r) == tile for u in self.units):
-                                    u = self.player_units[self.current_player][self.placed_units[self.current_player]]
-                                    u.q, u.r = q, r
-                                    self.units.append(u)
-                                    self.placed_units[self.current_player] += 1
-                        continue
-
-                    # Select unit
-                    if clicked_unit and clicked_unit.owner == self.current_player:
-                        self.selected_unit = clicked_unit
-                        self.hexmap.selected_hex = tile
-                        blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
-                        self.reachable_tiles = self.hexmap.get_reachable_tiles(tile, clicked_unit.move_range, blocked)
-
-                    # Movement
-                    elif self.selected_unit and tile in self.reachable_tiles:
-                        if self.selected_unit.action_points > 0:
-                            blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
-                            path = self.bfs_path((self.selected_unit.q, self.selected_unit.r), tile, blocked)
-                            if len(path) > 1:
-                                self.move_path = path[1:]
-                                self.moving = True
-                                self.move_timer = 0
-                                self.move_highlight = None
-                                self.selected_unit.action_points -= 1
-
-                    # Attack
-                    elif self.selected_unit and clicked_unit and clicked_unit.owner != self.current_player:
-                        if self.selected_unit.action_points > 0:
-                            valid = self.attack(self.selected_unit, clicked_unit)
-                            if valid:
-                                self.selected_unit.action_points -= 1
-                                self.auto_end_turn()
-
-                    else:
-                        self.selected_unit = None
-                        self.hexmap.selected_hex = None
-                        self.reachable_tiles.clear()
-
-            # ------------------------------
-            # Animation
-            # ------------------------------
-            if self.moving and self.selected_unit and self.move_path:
-                if self.move_timer >= self.move_delay:
-                    self.move_timer = 0
-                    step = self.move_path.pop(0)
-                    self.selected_unit.q, self.selected_unit.r = step
-                    self.move_highlight = step
-
-                    if not self.move_path:
-                        self.moving = False
-                        self.move_highlight = None
-                        self.reachable_tiles.clear()
-
-                        if self.selected_unit.action_points > 0:
-                            blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
-                            cur = (self.selected_unit.q, self.selected_unit.r)
-                            self.reachable_tiles = self.hexmap.get_reachable_tiles(cur, self.selected_unit.move_range, blocked)
-                        else:
-                            self.auto_end_turn()
-
-            # ------------------------------
-            # DRAW
-            # ------------------------------
-            self.draw_ui(end_btn)
-            pygame.display.flip()
 
     # ---------------------------------------------------------
-    # DRAW LOGIC
+    # UPDATE
     # ---------------------------------------------------------
-    def draw_ui(self, end_btn):
-        self.screen.fill((30, 30, 30))
+    def update(self, dt):
+        self.move_timer += dt
+
+        events = pygame.event.get()
+        keys = pygame.key.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+
+        self.camera.handle_input(events, keys)
+
+        if pygame.mouse.get_pressed()[0]:
+            mx, my = mouse_pos
+
+            if self.end_btn.collidepoint((mx, my)):
+                if not (
+                    self.placement_phase and
+                    self.placed_units[self.current_player] < UNITS_PER_PLAYER
+                ):
+                    self.end_turn()
+
+            wx, wy = self.camera.screen_to_world(mouse_pos)
+            q, r = self.hexmap.pixel_to_hex(wx, wy)
+
+            if not self.hexmap.is_inside_grid(q, r):
+                return
+
+            tile = (q, r)
+            clicked_unit = next(
+                (u for u in self.units if (u.q, u.r) == tile),
+                None
+            )
+
+            # Placement
+            if self.placement_phase:
+                if self.placed_units[self.current_player] < len(self.player_units[self.current_player]):
+                    if self.in_spawn_zone(self.current_player, r):
+                        if not any((u.q, u.r) == tile for u in self.units):
+                            u = self.player_units[self.current_player][self.placed_units[self.current_player]]
+                            u.q, u.r = q, r
+                            self.units.append(u)
+                            self.placed_units[self.current_player] += 1
+                return
+
+            # Selection
+            if clicked_unit and clicked_unit.owner == self.current_player:
+                self.selected_unit = clicked_unit
+                self.hexmap.selected_hex = tile
+                blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
+                self.reachable_tiles = self.hexmap.get_reachable_tiles(
+                    tile, clicked_unit.move_range, blocked
+                )
+
+            elif self.selected_unit and tile in self.reachable_tiles:
+                if self.selected_unit.action_points > 0:
+                    blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
+                    path = self.bfs_path(
+                        (self.selected_unit.q, self.selected_unit.r),
+                        tile,
+                        blocked
+                    )
+                    if len(path) > 1:
+                        self.move_path = path[1:]
+                        self.moving = True
+                        self.move_timer = 0
+                        self.selected_unit.action_points -= 1
+
+            elif self.selected_unit and clicked_unit and clicked_unit.owner != self.current_player:
+                if self.selected_unit.action_points > 0:
+                    if self.attack(self.selected_unit, clicked_unit):
+                        self.selected_unit.action_points -= 1
+                        self.auto_end_turn()
+
+            else:
+                self.selected_unit = None
+                self.hexmap.selected_hex = None
+                self.reachable_tiles.clear()
+
+        # Movement animation
+        if self.moving and self.selected_unit and self.move_path:
+            if self.move_timer >= self.move_delay:
+                self.move_timer = 0
+                step = self.move_path.pop(0)
+                self.selected_unit.q, self.selected_unit.r = step
+
+                if not self.move_path:
+                    self.moving = False
+                    self.reachable_tiles.clear()
+                    self.auto_end_turn()
+
+    # ---------------------------------------------------------
+    # DRAW
+    # ---------------------------------------------------------
+    def draw(self, surface):
+        surface.fill((30, 30, 30))
         self.hexmap.draw()
+        self.draw_ui()
 
-        # --- End Turn Button ---
+    def draw_ui(self):
         mx, my = pygame.mouse.get_pos()
-        hover = end_btn.collidepoint((mx, my))
-        btn_color = (90, 150, 200) if hover else (70, 130, 180)
-        pygame.draw.rect(self.screen, btn_color, end_btn, border_radius=8)
-        pygame.draw.rect(self.screen, (255, 255, 255), end_btn, 2, border_radius=8)
-        txt = self.font.render("End Turn", True, (255, 255, 255))
-        self.screen.blit(txt, (end_btn.x + 20, end_btn.y + 10))
+        hover = self.end_btn.collidepoint((mx, my))
+        color = (90, 150, 200) if hover else (70, 130, 180)
 
-        # --- Combat Log ---
+        pygame.draw.rect(self.screen, color, self.end_btn, border_radius=8)
+        pygame.draw.rect(self.screen, (255, 255, 255), self.end_btn, 2, border_radius=8)
+
+        txt = self.font.render("End Turn", True, (255, 255, 255))
+        self.screen.blit(txt, (self.end_btn.x + 20, self.end_btn.y + 10))
+
         ui_y = WINDOW_HEIGHT - BOTTOM_UI_HEIGHT
         pygame.draw.rect(self.screen, (25, 25, 40), (0, ui_y, WINDOW_WIDTH, BOTTOM_UI_HEIGHT))
-        pygame.draw.rect(self.screen, (100, 100, 150), (10, ui_y + 10, LOG_WIDTH, BOTTOM_UI_HEIGHT - 20), 2)
+        pygame.draw.rect(self.screen, (100, 100, 150),
+                         (10, ui_y + 10, LOG_WIDTH, BOTTOM_UI_HEIGHT - 20), 2)
 
         for i, line in enumerate(self.combat_log[:self.MAX_LOG_LINES]):
             txt = self.font.render(line, True, (220, 220, 220))
