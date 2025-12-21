@@ -2,11 +2,11 @@
 import pygame
 import os
 import json
-import math
 from datetime import datetime
 from hexmap import HexMap
 from settings import WINDOW_WIDTH, WINDOW_HEIGHT, GRID_WIDTH, GRID_HEIGHT, HEX_SIZE, FPS, SIDEBAR_WIDTH as SIDEBAR_W, TERRAIN_TYPES, TERRAIN_LIST
-
+from screen_base import Screen
+from camera import Camera
 
 MAPS_DIR = "maps"
 
@@ -15,10 +15,11 @@ TERRAIN_UI_LIST = TERRAIN_LIST  # ordered list from settings
 if not os.path.exists(MAPS_DIR):
     os.makedirs(MAPS_DIR)
 
-class MapEditor:
-    def __init__(self, surface, camera):
-        self.surface = surface
-        self.camera = camera
+class MapEditorScreen(Screen):
+    def __init__(self, app):      
+        super().__init__(app)
+        self.surface = app.screen
+        self.camera = Camera()
         
         # -------- FIXED: HexMap only receives map area width, not whole screen --------
         self.map_rect = pygame.Rect(0, 0, WINDOW_WIDTH - SIDEBAR_W, WINDOW_HEIGHT)
@@ -448,97 +449,86 @@ class MapEditor:
             return True
 
         return False
+    
+    def handle_event(self, ev):
+        mx, my = pygame.mouse.get_pos()
+        world_x, world_y = self.camera.screen_to_world((mx, my))
+        q, r = self.hexmap.pixel_to_hex(world_x, world_y)
 
-    # -------------------------------------------------------------------
-    # Main loop
-    # -------------------------------------------------------------------
-    def run(self):
-        pygame.key.set_repeat(300, 35)
-        clock = pygame.time.Clock()
-        running = True
+        if ev.type == pygame.MOUSEWHEEL:
+            self.sidebar_scroll -= ev.y * self.sidebar_scroll_speed
+            max_scroll = max(0, self.sidebar_content_height - WINDOW_HEIGHT)
+            self.sidebar_scroll = max(0, min(self.sidebar_scroll, max_scroll))
 
-        while running:
-            dt = clock.tick(FPS) / 1000.0
-            events = pygame.event.get()
+        if self.loading_menu:
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                self.handle_load_click(mx, my)
+            return
 
-            mx, my = pygame.mouse.get_pos()
-            world_x, world_y = self.camera.screen_to_world((mx, my))
-            q, r = self.hexmap.pixel_to_hex(world_x, world_y)
+        if ev.type == pygame.MOUSEBUTTONDOWN:
+            if ev.button == 1:
+                if mx >= WINDOW_WIDTH - SIDEBAR_W:
+                    result = self.handle_ui_click(mx, my)
+                    if result == "back":
+                        from menu_screen import MenuScreen
+                        self.next_screen = MenuScreen(self.app)
+                        self.done = True
+                else:
+                    self.drawing = True
+                    self.apply_brush(q, r)
 
-            for ev in events:
-                if ev.type == pygame.QUIT:
-                    running = False
-                    return
+            elif ev.button == 3:
+                if mx < WINDOW_WIDTH - SIDEBAR_W:
+                    self.sample_tile(q, r)
 
-                if ev.type == pygame.MOUSEWHEEL:
-                    self.sidebar_scroll -= ev.y * self.sidebar_scroll_speed
+        if ev.type == pygame.MOUSEBUTTONUP:
+            if ev.button == 1:
+                self.drawing = False
 
-                    # Clamp scrolling so you cannot scroll too far
-                    max_scroll = max(0, self.sidebar_content_height - WINDOW_HEIGHT)
-                    self.sidebar_scroll = max(0, min(self.sidebar_scroll, max_scroll))
+        if ev.type == pygame.MOUSEMOTION:
+            if self.drawing and mx < WINDOW_WIDTH - SIDEBAR_W:
+                self.apply_brush(q, r)
 
-                if self.loading_menu:
-                    if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                        self.handle_load_click(mx, my)
-                    continue
+        if ev.type == pygame.KEYDOWN:
+            if self.typing_name:
+                if ev.key == pygame.K_RETURN:
+                    self.typing_name = False
+                elif ev.key == pygame.K_BACKSPACE:
+                    self.map_name = self.map_name[:-1]
+                else:
+                    ch = ev.unicode
+                    if ch.isalnum() or ch in "._- ":
+                        self.map_name += ch
+                return
 
-                if ev.type == pygame.MOUSEBUTTONDOWN:
-                    if ev.button == 1:
-                        # Sidebar click?
-                        if mx >= WINDOW_WIDTH - SIDEBAR_W:
-                            result = self.handle_ui_click(mx, my)
-                            if result == "back":
-                                running = False
-                                break
-                        else:
-                            # MAP click
-                            self.drawing = True
-                            self.apply_brush(q, r)
+            if ev.key == pygame.K_UP:
+                self.selected_height = min(9, self.selected_height + 1)
+            elif ev.key == pygame.K_DOWN:
+                self.selected_height = max(0, self.selected_height - 1)
+            elif ev.key == pygame.K_RIGHT:
+                self.brush_size = min(4, self.brush_size + 1)
+            elif ev.key == pygame.K_LEFT:
+                self.brush_size = max(0, self.brush_size - 1)
+            elif ev.key == pygame.K_s and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+                self.save_map()
 
-                    elif ev.button == 3:
-                        if mx < WINDOW_WIDTH - SIDEBAR_W:
-                            self.sample_tile(q, r)
+    def update(self, dt):
+        pass
+    
+    def draw(self, surface):
+        mx, my = pygame.mouse.get_pos()
+        world_x, world_y = self.camera.screen_to_world((mx, my))
+        q, r = self.hexmap.pixel_to_hex(world_x, world_y)
 
-                if ev.type == pygame.MOUSEBUTTONUP:
-                    if ev.button == 1:
-                        self.drawing = False
+        if self.loading_menu:
+            self.draw_load_menu()
+            return
 
-                if ev.type == pygame.MOUSEMOTION:
-                    if self.drawing and mx < WINDOW_WIDTH - SIDEBAR_W:
-                        self.apply_brush(q, r)
+        surface.fill((30,30,36))
+        self.hexmap.draw()
+        self.draw_sidebar()
 
-                if ev.type == pygame.KEYDOWN:
-                    if self.typing_name:
-                        if ev.key == pygame.K_RETURN:
-                            self.typing_name = False
-                        elif ev.key == pygame.K_BACKSPACE:
-                            self.map_name = self.map_name[:-1]
-                        else:
-                            ch = ev.unicode
-                            if ch.isalnum() or ch in "._- ":
-                                self.map_name += ch
-                        continue
-                    if ev.key == pygame.K_UP:
-                        self.selected_height = min(9, self.selected_height + 1)
-                    elif ev.key == pygame.K_DOWN:
-                        self.selected_height = max(0, self.selected_height - 1)
-                    elif ev.key == pygame.K_RIGHT:
-                        self.brush_size = min(4, self.brush_size + 1)
-                    elif ev.key == pygame.K_LEFT:
-                        self.brush_size = max(0, self.brush_size - 1)
-                    elif ev.key == pygame.K_s and (pygame.key.get_mods() & pygame.KMOD_CTRL):
-                        self.save_map()
-
-            if self.loading_menu:
-                self.draw_load_menu()
-            else:
-                self.surface.fill((30,30,36))
-                self.hexmap.draw()
-                self.draw_sidebar()
-
-                if self.hexmap.is_inside_grid(q, r):
-                    px, py = self.hexmap.hex_to_pixel(q, r)
-                    sx2, sy2 = self.camera.apply((px, py))
-                    pygame.draw.circle(self.surface, (255,255,0), (int(sx2), int(sy2)), 6, 2)
-
-            pygame.display.flip()
+        if self.hexmap.is_inside_grid(q, r):
+            px, py = self.hexmap.hex_to_pixel(q, r)
+            sx2, sy2 = self.camera.apply((px, py))
+            pygame.draw.circle(surface, (255,255,0), (int(sx2), int(sy2)), 6, 2)

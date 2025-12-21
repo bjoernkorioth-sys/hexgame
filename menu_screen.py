@@ -20,8 +20,8 @@ class MenuScreen(Screen):
                     self.next_screen = GameSetupScreen(self.app)
                     self.done = True
                 elif self.selected == 1:
-                    from map_editor_screen import EditorScreen
-                    self.next_screen = EditorScreen(self.app)
+                    from map_editor_screen import MapEditorScreen
+                    self.next_screen = MapEditorScreen(self.app)
                     self.done = True
                 elif self.selected == 2:
                     self.app.running = False
@@ -30,8 +30,21 @@ class MenuScreen(Screen):
         pass
 
     def draw(self, surface):
-        surface.fill((20,20,30))
+        surface.fill((20, 20, 30))
+
+        # Title
         title = pygame.font.SysFont("arial", 48).render(
-            "HexGame", True, (240,240,240)
+            "HexGame", True, (240, 240, 240)
         )
-        surface.blit(title, (40,40))
+        surface.blit(title, (40, 40))
+
+        # Menu entries
+        items = ["Play Game", "Map Editor", "Exit"]
+        y = 140
+
+        for i, text in enumerate(items):
+            color = (255, 255, 255) if i == self.selected else (160, 160, 160)
+            label = self.font.render(text, True, color)
+            surface.blit(label, (60, y))
+            y += 60
+
