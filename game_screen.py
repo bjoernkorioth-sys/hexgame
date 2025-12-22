@@ -18,7 +18,7 @@ from unit_catalog import UNIT_CATALOG
 class GameScreen(Screen):
     def __init__(self, app, map_name, roster):
         super().__init__(app)
-
+        
         self.screen = app.screen
         self.font = pygame.font.SysFont("arial", 24)
 
@@ -39,6 +39,7 @@ class GameScreen(Screen):
         for player, list_of_names in self.roster_data.items():
             units = []
             for name in list_of_names:
+                print("Adding", name, "to player", player)
                 info = UNIT_CATALOG[name]
                 u = Unit(q=0, r=0, owner=player, **info["stats"])
                 u.cost = info["cost"]
@@ -88,6 +89,11 @@ class GameScreen(Screen):
         self.camera.x = (usable_w / 2) - cx
         self.camera.y = (usable_h / 2) - cy
 
+    def in_spawn_zone(self, player, r):
+        zone = 4
+        if player == 0:
+            return r < zone
+        return r >= self.hexmap.height - zone
     # ---------------------------------------------------------
     # MAP LOADING
     # ---------------------------------------------------------

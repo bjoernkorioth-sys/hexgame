@@ -198,7 +198,7 @@ class GameSetupScreen(Screen):
         surface.blit(font.render("Start", True, (255, 255, 255)),
                          (start_btn.x + 40, start_btn.y + 5))
 
-        self._rects = {
+        surface_rects = {
             "prev": prev_rect,
             "next": next_rect,
             "cards": card_rects,
@@ -207,9 +207,14 @@ class GameSetupScreen(Screen):
             "start": start_btn,
             "roster": roster_rects
         }
+        self._rects = surface_rects
 
 
     def handle_event(self, ev):
+        
+        if not hasattr(self, "_rects"):
+            return
+
         if ev.type == pygame.MOUSEBUTTONDOWN:
             mx, my = pygame.mouse.get_pos()
 
@@ -234,6 +239,7 @@ class GameSetupScreen(Screen):
                     if self.budget[self.selected_player] >= cost:
                         self.budget[self.selected_player] -= cost
                         self.player_rosters[self.selected_player].append(name)
+                        print("Adding", name, "to player", self.selected_player)
                     return
 
             # Map buttons
