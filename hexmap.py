@@ -93,6 +93,20 @@ class HexMap:
     # -----------------------
     # Drawing
     # -----------------------
+    def draw_highlight(self, q, r, color=(100, 100, 200, 80)):
+        # Convert hex to pixel
+        x, y = self.hex_to_pixel(q, r)
+        x, y = self.camera.world_to_screen((x, y))
+
+        # Get hex corners
+        points = self.hex_corners(x, y)
+
+        # Draw semi-transparent overlay
+        s = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+        pygame.draw.polygon(s, color, points)
+        self.screen.blit(s, (0, 0))
+
+    
     def draw_hex(self, corners, color, width=0):
         # corners are already in screen space
         pygame.draw.polygon(self.surface, color, corners, width)

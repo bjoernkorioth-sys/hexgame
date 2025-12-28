@@ -125,18 +125,7 @@ class GameScreen(Screen):
             self.next_screen = MenuScreen(self.app)
             self.done = True
 
-    # ---------------------------------------------------------
-    # UPDATE
-    # ---------------------------------------------------------
-    def update(self, dt):
-        self.move_timer += dt
-
-        events = pygame.event.get()
-        keys = pygame.key.get_pressed()
         mouse_pos = pygame.mouse.get_pos()
-
-        self.camera.handle_input(events, keys)
-
         if pygame.mouse.get_pressed()[0]:
             mx, my = mouse_pos
 
@@ -217,11 +206,34 @@ class GameScreen(Screen):
                     self.auto_end_turn()
 
     # ---------------------------------------------------------
+    # UPDATE
+    # ---------------------------------------------------------
+    def update(self, dt):
+        self.move_timer += dt
+
+        events = pygame.event.get()
+        keys = pygame.key.get_pressed()
+        
+
+        self.camera.handle_input(events, keys)
+
+
+    # ---------------------------------------------------------
     # DRAW
     # ---------------------------------------------------------
     def draw(self, surface):
         surface.fill((30, 30, 30))
         self.hexmap.draw()
+        
+        if self.placement_phase:
+            for r in range(self.hexmap.height):
+                for q in range(self.hexmap.width):
+                    if self.in_spawn_zone(self.current_player, r):
+                        self.hexmap.draw_highlight(
+                            q, r,
+                            color=(80, 120, 200, 80)
+                        )
+
         self.draw_ui()
 
     def draw_ui(self):
