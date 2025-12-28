@@ -58,6 +58,20 @@ class HexMap:
                                     py + self.size * math.sin(angle)))
                 self.corner_cache[(q, r)] = corners
 
+    def hex_corners(self, cx, cy):
+        """
+        Return the 6 corner points of a pointy-top hex centered at (cx, cy)
+        in screen coordinates.
+        """
+        corners = []
+        for i in range(6):
+            angle_deg = 60 * i - 30  # pointy-top orientation
+            angle_rad = math.radians(angle_deg)
+            x = cx + self.size * math.cos(angle_rad)
+            y = cy + self.size * math.sin(angle_rad)
+            corners.append((x, y))
+        return corners
+
     # -----------------------
     # Coordinate conversions
     # -----------------------
@@ -96,15 +110,15 @@ class HexMap:
     def draw_highlight(self, q, r, color=(100, 100, 200, 80)):
         # Convert hex to pixel
         x, y = self.hex_to_pixel(q, r)
-        x, y = self.camera.world_to_screen((x, y))
+        x, y = self.camera.apply((x, y))
 
         # Get hex corners
         points = self.hex_corners(x, y)
 
         # Draw semi-transparent overlay
-        s = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+        s = pygame.Surface(self.surface.get_size(), pygame.SRCALPHA)
         pygame.draw.polygon(s, color, points)
-        self.screen.blit(s, (0, 0))
+        self.surface.blit(s, (0, 0))
 
     
     def draw_hex(self, corners, color, width=0):
