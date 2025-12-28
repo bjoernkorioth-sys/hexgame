@@ -120,91 +120,88 @@ class GameScreen(Screen):
     # INPUT
     # ---------------------------------------------------------
     def handle_event(self, ev):
-        if ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
-            from menu_screen import MenuScreen
-            self.next_screen = MenuScreen(self.app)
-            self.done = True
+        print("EVENT:", ev)
+        if ev.type == pygame.KEYDOWN:
+            if ev.key == pygame.K_ESCAPE:
+                from menu_screen import MenuScreen
+                self.next_screen = MenuScreen(self.app)
+                self.done = True
 
-        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-            mouse_pos = pygame.mouse.get_pos()
-            if pygame.mouse.get_pressed()[0]:
-                mx, my = mouse_pos
+        elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            self.handle_left_click(ev)
+               
 
-                if self.end_btn.collidepoint((mx, my)):
-                    if not (
-                        self.placement_phase and
-                        self.placed_units[self.current_player] < UNITS_PER_PLAYER
-                    ):
-                        self.end_turn()
+    def handle_left_click(self, ev):
+        mx, my = ev.pos
 
-                wx, wy = self.camera.screen_to_world(mouse_pos)
-                q, r = self.hexmap.pixel_to_hex(wx, wy)
+        wx, wy = self.camera.screen_to_world((mx, my))
+        q, r = self.hexmap.pixel_to_hex(wx, wy)
 
-                if not self.hexmap.is_inside_grid(q, r):
-                    return
+        if not self.hexmap.is_inside_grid(q, r):
+            return
 
-                tile = (q, r)
-                clicked_unit = next(
-                    (u for u in self.units if (u.q, u.r) == tile),
-                    None
+        tile = (q, r)
+        clicked_unit = next(
+                (u for u in self.units if (u.q, u.r) == tile),
+                None
+        )
+
+        # Placement
+        if self.placement_phase:
+            if self.placed_units[self.current_player] < len(self.player_units[self.current_player]):
+                if self.in_spawn_zone(self.current_player, r):
+                    if not any((u.q, u.r) == tile for u in self.units):
+                        u = self.player_units[self.current_player][self.placed_units[self.current_player]]
+                        u.q, u.r = q, r
+                        self.units.append(u)
+                        self.placed_units[self.current_player] += 1
+            return
+
+        # Selection
+        if clicked_unit and clicked_unit.owner == self.current_player:
+            self.selected_unit = clicked_unit
+            self.hexmap.selected_hex = tile
+            blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
+            self.reachable_tiles = self.hexmap.get_reachable_tiles(
+                tile, clicked_unit.move_range, blocked
+            )
+
+        elif self.selected_unit and tile in self.reachable_tiles:
+            if self.selected_unit.action_points > 0:
+                blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
+                path = self.bfs_path(
+                    (self.selected_unit.q, self.selected_unit.r),
+                    tile,
+                    blocked
                 )
-
-                # Placement
-                if self.placement_phase:
-                    if self.placed_units[self.current_player] < len(self.player_units[self.current_player]):
-                        if self.in_spawn_zone(self.current_player, r):
-                            if not any((u.q, u.r) == tile for u in self.units):
-                                u = self.player_units[self.current_player][self.placed_units[self.current_player]]
-                                u.q, u.r = q, r
-                                self.units.append(u)
-                                self.placed_units[self.current_player] += 1
-                    return
-
-                # Selection
-                if clicked_unit and clicked_unit.owner == self.current_player:
-                    self.selected_unit = clicked_unit
-                    self.hexmap.selected_hex = tile
-                    blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
-                    self.reachable_tiles = self.hexmap.get_reachable_tiles(
-                        tile, clicked_unit.move_range, blocked
-                    )
-
-                elif self.selected_unit and tile in self.reachable_tiles:
-                    if self.selected_unit.action_points > 0:
-                        blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
-                        path = self.bfs_path(
-                            (self.selected_unit.q, self.selected_unit.r),
-                            tile,
-                            blocked
-                        )
-                        if len(path) > 1:
-                            self.move_path = path[1:]
-                            self.moving = True
-                            self.move_timer = 0
-                            self.selected_unit.action_points -= 1
-
-                elif self.selected_unit and clicked_unit and clicked_unit.owner != self.current_player:
-                    if self.selected_unit.action_points > 0:
-                        if self.attack(self.selected_unit, clicked_unit):
-                            self.selected_unit.action_points -= 1
-                            self.auto_end_turn()
-
-                else:
-                    self.selected_unit = None
-                    self.hexmap.selected_hex = None
-                    self.reachable_tiles.clear()
-
-            # Movement animation
-            if self.moving and self.selected_unit and self.move_path:
-                if self.move_timer >= self.move_delay:
+                if len(path) > 1:
+                    self.move_path = path[1:]
+                    self.moving = True
                     self.move_timer = 0
-                    step = self.move_path.pop(0)
-                    self.selected_unit.q, self.selected_unit.r = step
+                    self.selected_unit.action_points -= 1
 
-                    if not self.move_path:
-                        self.moving = False
-                        self.reachable_tiles.clear()
-                        self.auto_end_turn()
+        elif self.selected_unit and clicked_unit and clicked_unit.owner != self.current_player:
+            if self.selected_unit.action_points > 0:
+                if self.attack(self.selected_unit, clicked_unit):
+                    self.selected_unit.action_points -= 1
+                    self.auto_end_turn()
+
+        else:
+            self.selected_unit = None
+            self.hexmap.selected_hex = None
+            self.reachable_tiles.clear()
+
+        # Movement animation
+        if self.moving and self.selected_unit and self.move_path:
+            if self.move_timer >= self.move_delay:
+                self.move_timer = 0
+                step = self.move_path.pop(0)
+                self.selected_unit.q, self.selected_unit.r = step
+
+                if not self.move_path:
+                    self.moving = False
+                    self.reachable_tiles.clear()
+                    self.auto_end_turn()
 
     # ---------------------------------------------------------
     # UPDATE
