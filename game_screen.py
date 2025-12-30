@@ -240,8 +240,20 @@ class GameScreen(Screen):
     # ---------------------------------------------------------
     def draw(self, surface):
         surface.fill((30, 30, 30))
+
+        # draw map / tiles first
         self.hexmap.draw()
-        
+
+        # draw units (placed on the map)
+        # ensure units are drawn with camera transform via Unit.draw(surface, camera, hexmap)
+        for u in self.units:
+            try:
+                u.draw(surface, self.camera, self.hexmap)
+            except Exception as e:
+                # keep rendering robust in debug runs
+                print("Error drawing unit:", e)
+
+        # placement-phase highlights and roster UI
         if self.placement_phase:
             self.draw_roster_panel()
             for r in range(self.hexmap.height):
@@ -252,6 +264,7 @@ class GameScreen(Screen):
                             color=(80, 120, 200, 80)
                         )
 
+        # draw overlays/UI on top of map & units
         self.draw_ui()
 
     def draw_ui(self):
