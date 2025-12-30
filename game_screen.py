@@ -120,7 +120,7 @@ class GameScreen(Screen):
     # INPUT
     # ---------------------------------------------------------
     def handle_event(self, ev):
-        print("EVENT:", ev)
+        #print("GameScreen.handle_event:", ev)
         if ev.type == pygame.KEYDOWN:
             if ev.key == pygame.K_ESCAPE:
                 from menu_screen import MenuScreen
@@ -128,14 +128,19 @@ class GameScreen(Screen):
                 self.done = True
 
         elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            print("EVENT:", ev)
             self.handle_left_click(ev)
                
 
     def handle_left_click(self, ev):
-        mx, my = ev.pos
-
+        mx, my = getattr(ev, "pos", pygame.mouse.get_pos())
+        print("click screen coords:", mx, my)
         wx, wy = self.camera.screen_to_world((mx, my))
+        print("world coords:", wx, wy)
         q, r = self.hexmap.pixel_to_hex(wx, wy)
+        print("computed hex:", (q, r), "inside:", self.hexmap.is_inside_grid(q, r),
+            "in_spawn:", self.in_spawn_zone(self.current_player, r))
+        print("placed_units:", self.placed_units, "player_units_len:", len(self.player_units[self.current_player]))
 
         if not self.hexmap.is_inside_grid(q, r):
             return
@@ -156,6 +161,20 @@ class GameScreen(Screen):
                         self.units.append(u)
                         self.placed_units[self.current_player] += 1
             return
+        
+        if self.placement_phase:
+            if self.placed_units[self.current_player] >= len(self.player_units[self.current_player]):
+                print("No remaining units to place for player", self.current_player)
+                return
+            if not self.in_spawn_zone(self.current_player, r):
+                print("Tile not in spawn zone:", (q, r))
+                return
+            if any((u.q, u.r) == tile for u in self.units):
+                print("Tile occupied:", tile)
+                return
+            # place unit:
+            print("Placing unit for player", self.current_player, "at", tile)
+
 
         # Selection
         if clicked_unit and clicked_unit.owner == self.current_player:
