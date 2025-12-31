@@ -13,6 +13,7 @@ from camera import Camera
 from hexmap import HexMap
 from unit import Unit
 from unit_catalog import UNIT_CATALOG
+from turn_manager import TurnManager
 
 
 class GameScreen(Screen):
@@ -56,9 +57,8 @@ class GameScreen(Screen):
         self.move_highlight = None
 
         # Turn system
-        self.current_player = 0
-        self.placement_phase = True
-        self.placed_units = [0] * NUM_PLAYERS
+        units_per_player = [len(units) for units in self.player_units]
+        self.turns = TurnManager(NUM_PLAYERS, units_per_player)
         self.player_moved = [False] * NUM_PLAYERS
 
         # Combat log
@@ -139,10 +139,13 @@ class GameScreen(Screen):
         print("world coords:", wx, wy)
         q, r = self.hexmap.pixel_to_hex(wx, wy)
         print("computed hex:", (q, r), "inside:", self.hexmap.is_inside_grid(q, r),
-            "in_spawn:", self.in_spawn_zone(self.current_player, r))
-        print("placed_units:", self.placed_units, "player_units_len:", len(self.player_units[self.current_player]))
+            "in_spawn:", self.in_spawn_zone(self.turns.current_player, r))
 
         if not self.hexmap.is_inside_grid(q, r):
+            return
+        
+        if self.end_btn.collidepoint((mx, my)):
+            self.end_turn()
             return
 
         tile = (q, r)
@@ -152,32 +155,34 @@ class GameScreen(Screen):
         )
 
         # Placement
-        if self.placement_phase:
-            if self.placed_units[self.current_player] < len(self.player_units[self.current_player]):
-                if self.in_spawn_zone(self.current_player, r):
+        if self.turns.phase == "setup":
+            if self.turns.units_placed[self.turns.current_player] < len(self.player_units[self.turns.current_player]):
+                if self.in_spawn_zone(self.turns.current_player, r):
                     if not any((u.q, u.r) == tile for u in self.units):
-                        u = self.player_units[self.current_player][self.placed_units[self.current_player]]
+                        u = self.player_units[self.turns.current_player][self.turns.units_placed[self.turns.current_player]]
                         u.q, u.r = q, r
                         self.units.append(u)
-                        self.placed_units[self.current_player] += 1
+                        self.turns.record_placement(self.turns.current_player)
+                        if not self.turns.can_place_unit(self.turns.current_player):
+                            self.turns.next_turn()
             return
         
-        if self.placement_phase:
-            if self.placed_units[self.current_player] >= len(self.player_units[self.current_player]):
-                print("No remaining units to place for player", self.current_player)
+        if self.turns.phase == "setup":
+            if self.turns.units_placed[self.turns.current_player] >= len(self.player_units[self.turns.current_player]):
+                print("No remaining units to place for player", self.turns.current_player)
                 return
-            if not self.in_spawn_zone(self.current_player, r):
+            if not self.in_spawn_zone(self.turns.current_player, r):
                 print("Tile not in spawn zone:", (q, r))
                 return
             if any((u.q, u.r) == tile for u in self.units):
                 print("Tile occupied:", tile)
                 return
             # place unit:
-            print("Placing unit for player", self.current_player, "at", tile)
+            print("Placing unit for player", self.turns.current_player, "at", tile)
 
 
         # Selection
-        if clicked_unit and clicked_unit.owner == self.current_player:
+        if clicked_unit and clicked_unit.owner == self.turns.current_player:
             self.selected_unit = clicked_unit
             self.hexmap.selected_hex = tile
             blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
@@ -199,7 +204,7 @@ class GameScreen(Screen):
                     self.move_timer = 0
                     self.selected_unit.action_points -= 1
 
-        elif self.selected_unit and clicked_unit and clicked_unit.owner != self.current_player:
+        elif self.selected_unit and clicked_unit and clicked_unit.owner != self.turns.current_player:
             if self.selected_unit.action_points > 0:
                 if self.attack(self.selected_unit, clicked_unit):
                     self.selected_unit.action_points -= 1
@@ -254,11 +259,11 @@ class GameScreen(Screen):
                 print("Error drawing unit:", e)
 
         # placement-phase highlights and roster UI
-        if self.placement_phase:
+        if self.turns.phase == "setup":
             self.draw_roster_panel()
             for r in range(self.hexmap.height):
                 for q in range(self.hexmap.width):
-                    if self.in_spawn_zone(self.current_player, r):
+                    if self.in_spawn_zone(self.turns.current_player, r):
                         self.hexmap.draw_highlight(
                             q, r,
                             color=(80, 120, 200, 80)
@@ -299,17 +304,41 @@ class GameScreen(Screen):
                         (panel_x, panel_y, panel_w, panel_h), 2)
 
         title = self.font.render(
-            f"Player {self.current_player + 1} Roster",
+            f"Player {self.turns.current_player + 1} Roster",
             True, (255, 255, 255)
         )
         self.screen.blit(title, (panel_x + 10, panel_y + 10))
 
         y = panel_y + 50
-        for i, unit in enumerate(self.player_units[self.current_player]):
+        for i, unit in enumerate(self.player_units[self.turns.current_player]):
             color = (200, 200, 200)
-            if i == self.placed_units[self.current_player]:
+            if i == self.turns.units_placed[self.turns.current_player]:
                 color = (255, 255, 120)  # next unit to place
 
             txt = self.font.render(unit.unit_class, True, color)
             self.screen.blit(txt, (panel_x + 20, y))
             y += 28
+
+    def end_turn(self):
+        
+        if self.turns.phase == "setup":
+            if self.turns.can_place_unit(self.turns.current_player):
+                print("Cannot end turn: units still to place")
+                return
+        self.selected_unit = None
+        self.reachable_tiles.clear()
+        self.moving = False
+        self.move_path.clear()
+        self.hexmap.selected_hex = None
+
+        self.turns.next_turn()
+
+        # reset AP for new player's units
+        for u in self.units:
+            if u.owner == self.turns.current_player:
+                u.reset_actions()
+
+    def auto_end_turn(self):
+        if self.selected_unit and self.selected_unit.action_points <= 0:
+            self.end_turn()
+

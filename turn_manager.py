@@ -1,11 +1,11 @@
 # turn_manager.py
 class TurnManager:
-    def __init__(self, num_players, units_per_player):
+    def __init__(self, num_players, units_per_player: list[int]):
         self.num_players = num_players
         self.units_per_player = units_per_player
         self.current_player = 0
         self.phase = "setup"  # can be "setup" or "play"
-        self.units_placed = [0] * num_players
+        self.units_placed = [0] * len(units_per_player)
 
     def next_turn(self):
         """Advance to the next player's turn, switching phase if setup is complete."""
@@ -13,14 +13,17 @@ class TurnManager:
 
         # Check if setup phase is complete
         if self.phase == "setup":
-            if all(u == self.units_per_player for u in self.units_placed):
+            if all(
+                self.units_placed[i] >= self.units_per_player[i]
+                for i in range(self.num_players)
+            ):
                 self.phase = "play"
 
     def can_place_unit(self, player_id):
         """Return True if the player can still place units during setup."""
         return (
             self.phase == "setup"
-            and self.units_placed[player_id] < self.units_per_player
+            and self.units_placed[player_id] < self.units_per_player[player_id]
         )
 
     def record_placement(self, player_id):
