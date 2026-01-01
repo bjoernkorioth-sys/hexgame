@@ -193,7 +193,7 @@ class GameScreen(Screen):
         elif self.selected_unit and tile in self.reachable_tiles:
             if self.selected_unit.action_points > 0:
                 blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
-                path = self.bfs_path(
+                path = self.hexmap.find_path(
                     (self.selected_unit.q, self.selected_unit.r),
                     tile,
                     blocked
@@ -268,7 +268,13 @@ class GameScreen(Screen):
                             q, r,
                             color=(80, 120, 200, 80)
                         )
-
+        # movement highlights (play phase)
+        if self.selected_unit and self.turns.phase == "play":
+            for (q, r) in self.reachable_tiles:
+                self.hexmap.draw_highlight(
+                    q, r,
+                    color=(80, 200, 120, 80)
+                )
         # draw overlays/UI on top of map & units
         self.draw_ui()
 
@@ -276,6 +282,16 @@ class GameScreen(Screen):
         mx, my = pygame.mouse.get_pos()
         hover = self.end_btn.collidepoint((mx, my))
         color = (90, 150, 200) if hover else (70, 130, 180)
+
+        turn_text = f"Player {self.turns.current_player + 1}"
+        if self.turns.phase == "setup":
+            turn_text += " – Deployment"
+        else:
+            turn_text += " – Play"
+
+        txt = self.font.render(turn_text, True, (255, 255, 255))
+        self.screen.blit(txt, (30, 30))
+
 
         pygame.draw.rect(self.screen, color, self.end_btn, border_radius=8)
         pygame.draw.rect(self.screen, (255, 255, 255), self.end_btn, 2, border_radius=8)
@@ -342,3 +358,18 @@ class GameScreen(Screen):
         if self.selected_unit and self.selected_unit.action_points <= 0:
             self.end_turn()
 
+    def attack(self, attacker, defender):
+        dmg = max(0, attacker.attack - defender.defense)
+        defender.hp -= dmg
+
+        self.combat_log.insert(
+            0,
+            f"P{attacker.owner+1} {attacker.unit_class} hits {defender.unit_class} for {dmg}"
+        )
+
+        if defender.hp <= 0:
+            self.units.remove(defender)
+            self.combat_log.insert(0, f"{defender.unit_class} destroyed")
+            return True
+
+        return False

@@ -3,6 +3,7 @@ import pygame
 import math
 import random
 from settings import HEX_SIZE, GRID_WIDTH, GRID_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT, MAP_OFFSET_X, MAP_OFFSET_Y, TERRAIN_TYPES
+from collections import deque
 
 SQRT3 = math.sqrt(3.0)
 
@@ -186,3 +187,47 @@ class HexMap:
                     came_from[n] = current
                     frontier.append((n, new_remain))
         return reachable
+    
+
+    def find_path(self, start, goal, blocked):
+        if start == goal:
+            return [start]
+
+        frontier = deque([start])
+        came_from = {start: None}
+
+        while frontier:
+            current = frontier.popleft()
+
+            for neighbor in self.neighbors(*current):
+                if not self.is_inside_grid(*neighbor):
+                    continue
+                if neighbor in blocked:
+                    continue
+
+                terrain = self.terrain.get(neighbor)
+                if not terrain or not terrain["passable"]:
+                    continue
+
+                cur_h = self.terrain[current]["height"]
+                if abs(cur_h - terrain["height"]) > 1:
+                    continue
+
+                if neighbor not in came_from:
+                    came_from[neighbor] = current
+                    if neighbor == goal:
+                        frontier.clear()
+                        break
+                    frontier.append(neighbor)
+
+        if goal not in came_from:
+            return None
+
+        # reconstruct path
+        path = []
+        cur = goal
+        while cur is not None:
+            path.append(cur)
+            cur = came_from[cur]
+        path.reverse()
+        return path
