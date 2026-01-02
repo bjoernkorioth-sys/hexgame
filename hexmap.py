@@ -117,9 +117,9 @@ class HexMap:
         points = self.hex_corners(x, y)
 
         # Draw semi-transparent overlay
-        s = pygame.Surface(self.surface.get_size(), pygame.SRCALPHA)
-        pygame.draw.polygon(s, color, points)
-        self.surface.blit(s, (0, 0))
+        #s = pygame.Surface(self.surface.get_size(), pygame.SRCALPHA)
+        pygame.draw.polygon(self.surface, color, points, 3)
+        #self.surface.blit(s, (0, 0))
 
     
     def draw_hex(self, corners, color, width=0):
@@ -145,15 +145,6 @@ class HexMap:
             screen_corners = [self.camera.apply(point) for point in corners]
             pygame.draw.polygon(self.surface, (100,100,100), screen_corners, 1)
 
-        # Draw hover/selection outlines
-        for hex_coord, col in ((self.hover_hex, (255,255,0)), (self.selected_hex, (0,150,255))):
-            if hex_coord is None:
-                continue
-            q, r = hex_coord
-            if not self.is_inside_grid(q, r):
-                continue
-            screen_corners = [self.camera.apply(point) for point in self.corner_cache[(q, r)]]
-            pygame.draw.polygon(self.surface, col, screen_corners, 3)
 
     # -----------------------
     # Helpers for editor & gameplay

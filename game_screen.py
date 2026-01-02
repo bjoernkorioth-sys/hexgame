@@ -133,6 +133,10 @@ class GameScreen(Screen):
                
 
     def handle_left_click(self, ev):
+
+        if self.moving:
+            return 
+        
         mx, my = getattr(ev, "pos", pygame.mouse.get_pos())
         print("click screen coords:", mx, my)
         wx, wy = self.camera.screen_to_world((mx, my))
@@ -184,7 +188,6 @@ class GameScreen(Screen):
         # Selection
         if clicked_unit and clicked_unit.owner == self.turns.current_player:
             self.selected_unit = clicked_unit
-            self.hexmap.selected_hex = tile
             blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
             self.reachable_tiles = self.hexmap.get_reachable_tiles(
                 tile, clicked_unit.move_range, blocked
@@ -207,31 +210,45 @@ class GameScreen(Screen):
         elif self.selected_unit and clicked_unit and clicked_unit.owner != self.turns.current_player:
             if self.selected_unit.action_points > 0:
                 if self.attack(self.selected_unit, clicked_unit):
-                    self.selected_unit.action_points -= 1
                     self.auto_end_turn()
 
-        else:
-            self.selected_unit = None
-            self.hexmap.selected_hex = None
-            self.reachable_tiles.clear()
+        elif not clicked_unit and self.turns.phase == "play":
+            # ignore empty clicks to preserve selection
+            return
 
-        # Movement animation
-        if self.moving and self.selected_unit and self.move_path:
-            if self.move_timer >= self.move_delay:
-                self.move_timer = 0
-                step = self.move_path.pop(0)
-                self.selected_unit.q, self.selected_unit.r = step
-
-                if not self.move_path:
-                    self.moving = False
-                    self.reachable_tiles.clear()
-                    self.auto_end_turn()
 
     # ---------------------------------------------------------
     # UPDATE
     # ---------------------------------------------------------
     def update(self, dt):
         self.move_timer += dt
+
+        # --- HANDLE MOVEMENT ---
+        if self.moving and self.move_path:
+            if self.move_timer >= self.move_delay:
+                self.move_timer = 0
+
+                next_q, next_r = self.move_path.pop(0)
+                self.selected_unit.q = next_q
+                self.selected_unit.r = next_r
+
+        # --- END MOVEMENT ---
+
+        # Movement animation
+        if not self.move_path:
+            self.moving = False
+
+            if self.selected_unit:
+                if self.selected_unit.action_points > 0:
+                    blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
+                    self.reachable_tiles = self.hexmap.get_reachable_tiles(
+                        (self.selected_unit.q, self.selected_unit.r),
+                        self.selected_unit.move_range,
+                        blocked
+                    )
+                else:
+                    self.reachable_tiles.clear()
+                    self.auto_end_turn()
 
         events = pygame.event.get()
         keys = pygame.key.get_pressed()
@@ -257,6 +274,14 @@ class GameScreen(Screen):
             except Exception as e:
                 # keep rendering robust in debug runs
                 print("Error drawing unit:", e)
+
+        # GameScreen.draw()
+        if self.selected_unit:
+            q, r = self.selected_unit.q, self.selected_unit.r
+            self.hexmap.draw_highlight(
+                q, r,
+                color=(0, 150, 255, 120)
+            )
 
         # placement-phase highlights and roster UI
         if self.turns.phase == "setup":
@@ -359,17 +384,25 @@ class GameScreen(Screen):
             self.end_turn()
 
     def attack(self, attacker, defender):
-        dmg = max(0, attacker.attack - defender.defense)
-        defender.hp -= dmg
+        # choose weapon (melee for now)
+        weapon_type = "melee"
 
+        # check range
+        if not attacker.can_attack(defender, weapon_type):
+            print("Target out of range")
+            return False
+
+        hits, unsaved, killed = attacker.perform_attack(defender, weapon_type)
+
+        # combat log
         self.combat_log.insert(
             0,
-            f"P{attacker.owner+1} {attacker.unit_class} hits {defender.unit_class} for {dmg}"
+            f"P{attacker.owner+1} {attacker.unit_class} attacks "
+            f"{defender.unit_class}: {hits} hits, {unsaved} unsaved"
         )
 
-        if defender.hp <= 0:
+        if killed:
             self.units.remove(defender)
             self.combat_log.insert(0, f"{defender.unit_class} destroyed")
-            return True
 
-        return False
+        return True
