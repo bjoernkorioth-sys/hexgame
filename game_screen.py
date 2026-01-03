@@ -50,6 +50,7 @@ class GameScreen(Screen):
 
         self.selected_unit = None
         self.reachable_tiles = set()
+        self.attackable_enemies = set()
         self.moving = False
         self.move_path = []
         self.move_timer = 0
@@ -188,6 +189,7 @@ class GameScreen(Screen):
         # Selection
         if clicked_unit and clicked_unit.owner == self.turns.current_player:
             self.selected_unit = clicked_unit
+            self.update_attackable_enemies()
             blocked = {(u.q, u.r) for u in self.units if u is not self.selected_unit}
             self.reachable_tiles = self.hexmap.get_reachable_tiles(
                 tile, clicked_unit.move_range, blocked
@@ -246,8 +248,10 @@ class GameScreen(Screen):
                         self.selected_unit.move_range,
                         blocked
                     )
+                    self.update_attackable_enemies()
                 else:
                     self.reachable_tiles.clear()
+                    self.attackable_enemies.clear()
                     self.auto_end_turn()
 
         events = pygame.event.get()
@@ -300,6 +304,11 @@ class GameScreen(Screen):
                     q, r,
                     color=(80, 200, 120, 80)
                 )
+            for (q, r) in self.attackable_enemies:
+                self.hexmap.draw_highlight(
+                    q, r,
+                    color=(200, 80, 80, 160)
+        )
         # draw overlays/UI on top of map & units
         self.draw_ui()
 
@@ -368,6 +377,7 @@ class GameScreen(Screen):
                 return
         self.selected_unit = None
         self.reachable_tiles.clear()
+        self.attackable_enemies.clear()
         self.moving = False
         self.move_path.clear()
         self.hexmap.selected_hex = None
@@ -384,21 +394,31 @@ class GameScreen(Screen):
             self.end_turn()
 
     def attack(self, attacker, defender):
-        # choose weapon (melee for now)
-        weapon_type = "melee"
+        if attacker.action_points <= 0:
+            return False
 
-        # check range
-        if not attacker.can_attack(defender, weapon_type):
-            print("Target out of range")
+        # 1. Melee has priority
+        if attacker.can_attack(defender, "melee"):
+            weapon_type = "melee"
+
+        # 2. Try ranged
+        elif (
+            attacker.can_attack(defender, "ranged")
+            and not self.is_adjacent_to_enemy(attacker)
+        ):
+            weapon_type = "ranged"
+
+        else:
+            print("No valid attack (range or adjacency restriction)")
             return False
 
         hits, unsaved, killed = attacker.perform_attack(defender, weapon_type)
 
-        # combat log
         self.combat_log.insert(
             0,
-            f"P{attacker.owner+1} {attacker.unit_class} attacks "
-            f"{defender.unit_class}: {hits} hits, {unsaved} unsaved"
+            f"P{attacker.owner+1} {attacker.unit_class} "
+            f"{weapon_type} attacks {defender.unit_class}: "
+            f"{hits} hits, {unsaved} unsaved"
         )
 
         if killed:
@@ -406,3 +426,38 @@ class GameScreen(Screen):
             self.combat_log.insert(0, f"{defender.unit_class} destroyed")
 
         return True
+
+    
+    def is_adjacent_to_enemy(self, unit):
+        for dq, dr in self.hexmap.AXIAL_DIRECTIONS:
+            nq, nr = unit.q + dq, unit.r + dr
+            for other in self.units:
+                if other.owner != unit.owner and (other.q, other.r) == (nq, nr):
+                    return True
+        return False
+    
+    def update_attackable_enemies(self):
+        self.attackable_enemies.clear()
+
+        if not self.selected_unit:
+            return
+
+        attacker = self.selected_unit
+
+        for enemy in self.units:
+            if enemy.owner == attacker.owner:
+                continue
+
+            # melee possible
+            if attacker.can_attack(enemy, "melee"):
+                self.attackable_enemies.add((enemy.q, enemy.r))
+                continue
+
+            # ranged possible
+            if (
+                attacker.can_attack(enemy, "ranged")
+                and not self.is_adjacent_to_enemy(attacker)
+            ):
+                self.attackable_enemies.add((enemy.q, enemy.r))
+
+
