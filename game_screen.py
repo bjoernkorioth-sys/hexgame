@@ -140,6 +140,12 @@ class GameScreen(Screen):
         
         mx, my = getattr(ev, "pos", pygame.mouse.get_pos())
         print("click screen coords:", mx, my)
+
+        # FIRST: UI buttons
+        if self.end_btn.collidepoint((mx, my)):
+            self.end_turn()
+            return
+
         wx, wy = self.camera.screen_to_world((mx, my))
         print("world coords:", wx, wy)
         q, r = self.hexmap.pixel_to_hex(wx, wy)
@@ -326,7 +332,7 @@ class GameScreen(Screen):
         txt = self.font.render(turn_text, True, (255, 255, 255))
         self.screen.blit(txt, (30, 30))
 
-
+        
         pygame.draw.rect(self.screen, color, self.end_btn, border_radius=8)
         pygame.draw.rect(self.screen, (255, 255, 255), self.end_btn, 2, border_radius=8)
 
