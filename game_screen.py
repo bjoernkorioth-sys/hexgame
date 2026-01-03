@@ -42,7 +42,7 @@ class GameScreen(Screen):
             for name in list_of_names:
                 print("Adding", name, "to player", player)
                 info = UNIT_CATALOG[name]
-                u = Unit(q=0, r=0, owner=player, **info["stats"])
+                u = Unit(q=0, r=0, owner=player,unit_class=name, **info["stats"])
                 u.cost = info["cost"]
                 u.load_icon(info["icon"])
                 units.append(u)
