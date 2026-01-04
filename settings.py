@@ -133,3 +133,45 @@ TERRAIN_TYPES = {
 # List version for UI ordering
 TERRAIN_LIST = list(TERRAIN_TYPES.keys())
 
+# =========================
+# UI GLOBAL SCALING
+# =========================
+
+UI_BASE_WIDTH  = 1280
+UI_BASE_HEIGHT = 720
+
+# used to compute scale factor
+def ui_scale(screen_w, screen_h):
+    return min(
+        screen_w / UI_BASE_WIDTH,
+        screen_h / UI_BASE_HEIGHT
+    )
+
+# =========================
+# UI ANCHOR RATIOS
+# =========================
+
+UI_PADDING_RATIO = 0.015
+
+END_TURN_BUTTON = {
+    "w": 0.16,
+    "h": 0.07,
+}
+
+UNIT_HUD = {
+    "w": 0.26,
+    "h": 0.18,
+}
+
+TURN_INDICATOR = {
+    "w": 0.22,
+    "h": 0.06,
+}
+
+# =========================
+# COLORS / STYLE
+# =========================
+
+UI_BG_COLOR = (20, 20, 20, 180)
+UI_BORDER_COLOR = (180, 180, 180)
+UI_TEXT_COLOR = (240, 240, 240)
