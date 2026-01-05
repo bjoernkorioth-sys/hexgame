@@ -327,6 +327,11 @@ class GameScreen(Screen):
             u.draw(surface, self.camera, self.hexmap)
             
     def draw_overlays(self, surface):
+        
+        if self.selected_unit and self.turns.phase == "play":
+            for q, r in self.reachable_tiles:
+                self.hexmap.draw_highlight(q, r, color=(80, 200, 120, 80))
+
         if self.selected_unit:
             self.hexmap.draw_highlight(
                 self.selected_unit.q,
@@ -334,9 +339,18 @@ class GameScreen(Screen):
                 color=(0, 150, 255, 120)
             )
 
-        if self.selected_unit and self.turns.phase == "play":
-            for q, r in self.reachable_tiles:
-                self.hexmap.draw_highlight(q, r, color=(80, 200, 120, 80))
+
+        # --- Attackable enemies ---
+        if (
+            self.selected_unit
+            and self.turns.phase == "play"
+            and self.selected_unit.action_points > 0
+        ):
+            for q, r in self.attackable_enemies:
+                self.hexmap.draw_highlight(
+                    q, r,
+                    color=(200, 60, 60, 120)  # red
+                )
 
         # --- Deployment zone ---
         if self.turns.phase == "setup":
