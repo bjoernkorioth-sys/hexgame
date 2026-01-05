@@ -175,3 +175,23 @@ TURN_INDICATOR = {
 UI_BG_COLOR = (20, 20, 20, 180)
 UI_BORDER_COLOR = (180, 180, 180)
 UI_TEXT_COLOR = (240, 240, 240)
+
+UI_COLORS = {
+    "text": (240, 240, 240),
+
+    "button": (70, 130, 180),
+    "button_hover": (90, 150, 200),
+    "button_border": (255, 255, 255),
+
+    "panel_bg": (35, 35, 50),
+    "panel_border": (120, 120, 160),
+}
+# =========================
+# UI RADII (responsive)
+# =========================
+
+UI_RADII = {
+    "small": 8,
+    "medium": 14,
+    "large": 22,
+}

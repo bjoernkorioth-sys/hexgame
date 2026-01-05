@@ -4,17 +4,14 @@ import random
 from collections import deque
 
 from screen_base import Screen
-from settings import (
-    WINDOW_WIDTH, WINDOW_HEIGHT,
-    NUM_PLAYERS, UNITS_PER_PLAYER,
-    BOTTOM_UI_HEIGHT, LOG_WIDTH
-)
+from settings import *
 from camera import Camera
 from hexmap import HexMap
 from unit import Unit
 from unit_catalog import UNIT_CATALOG
 from turn_manager import TurnManager
-
+from ui.layout import UIAnchorLayout
+from ui.hud import UnitHUD
 
 class GameScreen(Screen):
     def __init__(self, app, map_name, roster):
@@ -22,6 +19,8 @@ class GameScreen(Screen):
         
         self.screen = app.screen
         self.font = pygame.font.SysFont("arial", 24)
+        self.ui = UIAnchorLayout(self.screen.get_size())
+        self.unit_hud = UnitHUD()
 
         # External choices
         self.map_name = map_name
@@ -66,8 +65,27 @@ class GameScreen(Screen):
         self.combat_log = []
         self.MAX_LOG_LINES = 8
 
-        # UI
-        self.end_btn = pygame.Rect(WINDOW_WIDTH - 180, 40, 140, 50)
+        self.ui.define(
+            "end_turn",
+            anchor="bottom_right",
+            w=END_TURN_BUTTON["w"],
+            h=END_TURN_BUTTON["h"]
+        )
+
+        self.ui.define(
+            "unit_hud",
+            anchor="top_right",
+            w=UNIT_HUD["w"],
+            h=UNIT_HUD["h"]
+        )
+
+        self.ui.define(
+            "turn_label",
+            anchor="top_left",
+            w=TURN_INDICATOR["w"],
+            h=TURN_INDICATOR["h"]
+        )
+
 
     # ---------------------------------------------------------
     # INITIALIZATION
@@ -129,22 +147,53 @@ class GameScreen(Screen):
                 self.done = True
 
         elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-            print("EVENT:", ev)
-            self.handle_left_click(ev)
+            if self.handle_ui_click(ev.pos):
+                return
+            self.handle_world_click(ev.pos)
+
+        elif ev.type == pygame.VIDEORESIZE:
+            self.screen = pygame.display.set_mode(ev.size, pygame.RESIZABLE)
+            self.ui.update(ev.size)
+
+            # redefine UI elements
+            self.ui.define(
+                "end_turn",
+                anchor="bottom_right",
+                w=END_TURN_BUTTON["w"],
+                h=END_TURN_BUTTON["h"]
+            )
+
+            self.ui.define(
+                "unit_hud",
+                anchor="top_right",
+                w=UNIT_HUD["w"],
+                h=UNIT_HUD["h"]
+            )
+
+            self.ui.define(
+                "turn_label",
+                anchor="top_left",
+                w=TURN_INDICATOR["w"],
+                h=TURN_INDICATOR["h"]
+            )
+
+
+    def handle_ui_click(self, pos):
+        if self.turns.phase == "play":
+            end_btn = self.ui.get("end_turn")
+            if end_btn.collidepoint(pos):
+                self.end_turn()
+                return True
+        return False
                
 
-    def handle_left_click(self, ev):
+    def handle_world_click(self, pos):
+        mx, my = pos
 
         if self.moving:
             return 
         
-        mx, my = getattr(ev, "pos", pygame.mouse.get_pos())
         print("click screen coords:", mx, my)
-
-        # FIRST: UI buttons
-        if self.end_btn.collidepoint((mx, my)):
-            self.end_turn()
-            return
 
         wx, wy = self.camera.screen_to_world((mx, my))
         print("world coords:", wx, wy)
@@ -153,10 +202,6 @@ class GameScreen(Screen):
             "in_spawn:", self.in_spawn_zone(self.turns.current_player, r))
 
         if not self.hexmap.is_inside_grid(q, r):
-            return
-        
-        if self.end_btn.collidepoint((mx, my)):
-            self.end_turn()
             return
 
         tile = (q, r)
@@ -272,82 +317,67 @@ class GameScreen(Screen):
     # ---------------------------------------------------------
     def draw(self, surface):
         surface.fill((30, 30, 30))
+        self.draw_world(surface)
+        self.draw_overlays(surface)
+        self.draw_ui(surface)
 
-        # draw map / tiles first
+    def draw_world(self, surface):
         self.hexmap.draw()
-
-        # draw units (placed on the map)
-        # ensure units are drawn with camera transform via Unit.draw(surface, camera, hexmap)
         for u in self.units:
-            try:
-                u.draw(surface, self.camera, self.hexmap)
-            except Exception as e:
-                # keep rendering robust in debug runs
-                print("Error drawing unit:", e)
-
-        # GameScreen.draw()
+            u.draw(surface, self.camera, self.hexmap)
+            
+    def draw_overlays(self, surface):
         if self.selected_unit:
-            q, r = self.selected_unit.q, self.selected_unit.r
             self.hexmap.draw_highlight(
-                q, r,
+                self.selected_unit.q,
+                self.selected_unit.r,
                 color=(0, 150, 255, 120)
             )
 
-        # placement-phase highlights and roster UI
+        if self.selected_unit and self.turns.phase == "play":
+            for q, r in self.reachable_tiles:
+                self.hexmap.draw_highlight(q, r, color=(80, 200, 120, 80))
+
+        # --- Deployment zone ---
         if self.turns.phase == "setup":
-            self.draw_roster_panel()
-            for r in range(self.hexmap.height):
-                for q in range(self.hexmap.width):
-                    if self.in_spawn_zone(self.turns.current_player, r):
+            current_player = self.turns.current_player
+            for q in range(self.hexmap.width):
+                for r in range(self.hexmap.height):
+                    if self.in_spawn_zone(current_player, r):
                         self.hexmap.draw_highlight(
                             q, r,
-                            color=(80, 120, 200, 80)
+                            color=(200, 200, 80, 80)
                         )
-        # movement highlights (play phase)
-        if self.selected_unit and self.turns.phase == "play":
-            for (q, r) in self.reachable_tiles:
-                self.hexmap.draw_highlight(
-                    q, r,
-                    color=(80, 200, 120, 80)
-                )
-            for (q, r) in self.attackable_enemies:
-                self.hexmap.draw_highlight(
-                    q, r,
-                    color=(200, 80, 80, 160)
-        )
-        # draw overlays/UI on top of map & units
-        self.draw_ui()
 
-    def draw_ui(self):
-        mx, my = pygame.mouse.get_pos()
-        hover = self.end_btn.collidepoint((mx, my))
-        color = (90, 150, 200) if hover else (70, 130, 180)
+    def draw_ui(self, surface):
+        self.draw_turn_label(surface)
+        self.draw_end_turn_button(surface)
 
-        turn_text = f"Player {self.turns.current_player + 1}"
-        if self.turns.phase == "setup":
-            turn_text += " – Deployment"
-        else:
-            turn_text += " – Play"
+        if self.selected_unit:
+            rect = self.ui.get("unit_hud")
+            self.unit_hud.draw(surface, self.selected_unit, rect)
 
-        txt = self.font.render(turn_text, True, (255, 255, 255))
-        self.screen.blit(txt, (30, 30))
+    def draw_end_turn_button(self, surface):
+        rect = self.ui.get("end_turn")
+        hover = rect.collidepoint(pygame.mouse.get_pos())
 
-        
-        pygame.draw.rect(self.screen, color, self.end_btn, border_radius=8)
-        pygame.draw.rect(self.screen, (255, 255, 255), self.end_btn, 2, border_radius=8)
+        bg = UI_COLORS["button_hover"] if hover else UI_COLORS["button"]
+        pygame.draw.rect(surface, bg, rect, border_radius=self.ui.radius("small"))
+        pygame.draw.rect(surface, UI_COLORS["button_border"], rect, 2)
 
-        txt = self.font.render("End Turn", True, (255, 255, 255))
-        self.screen.blit(txt, (self.end_btn.x + 20, self.end_btn.y + 10))
+        txt = self.font.render("End Turn", True, UI_COLORS["text"])
+        surface.blit(txt, txt.get_rect(center=rect.center))
 
-        ui_y = WINDOW_HEIGHT - BOTTOM_UI_HEIGHT
-        pygame.draw.rect(self.screen, (25, 25, 40), (0, ui_y, WINDOW_WIDTH, BOTTOM_UI_HEIGHT))
-        pygame.draw.rect(self.screen, (100, 100, 150),
-                         (10, ui_y + 10, LOG_WIDTH, BOTTOM_UI_HEIGHT - 20), 2)
+    def draw_turn_label(self, surface):
+        rect = self.ui.get("turn_label")
 
-        for i, line in enumerate(self.combat_log[:self.MAX_LOG_LINES]):
-            txt = self.font.render(line, True, (220, 220, 220))
-            self.screen.blit(txt, (20, ui_y + 20 + i * 22))
+        phase = "Deployment" if self.turns.phase == "setup" else "Play"
+        text = f"Player {self.turns.current_player + 1} – {phase}"
 
+        txt = self.font.render(text, True, UI_COLORS["text"])
+        surface.blit(txt, txt.get_rect(midleft=rect.midleft))
+
+    
     def draw_roster_panel(self):
         panel_x = 20
         panel_y = 80
