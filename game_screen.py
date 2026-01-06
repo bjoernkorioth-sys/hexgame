@@ -385,11 +385,40 @@ class GameScreen(Screen):
     def draw_turn_label(self, surface):
         rect = self.ui.get("turn_label")
 
-        phase = "Deployment" if self.turns.phase == "setup" else "Play"
-        text = f"Player {self.turns.current_player + 1} – {phase}"
+        # --- Panel background ---
+        bg = pygame.Surface(rect.size, pygame.SRCALPHA)
+        bg.fill(UI_BG_COLOR)
+        surface.blit(bg, rect.topleft)
 
-        txt = self.font.render(text, True, UI_COLORS["text"])
-        surface.blit(txt, txt.get_rect(midleft=rect.midleft))
+        pygame.draw.rect(
+            surface,
+            UI_COLORS["panel_border"],
+            rect,
+            1,
+            border_radius=self.ui.radius("small")
+        )
+
+        # --- Text ---
+        font = pygame.font.Font(
+            None,
+            int(18 * self.ui.scale)
+        )
+
+        player_text = f"Player {self.turns.current_player + 1}"
+
+        if self.turns.phase == "setup":
+            turn_text = "Deployment"
+        else:
+            turn_text = f"Turn {self.turns.turn_count}"
+
+        txt_player = font.render(player_text, True, UI_COLORS["text"])
+        txt_turn   = font.render(turn_text,   True, UI_COLORS["text"])
+
+        x = rect.left + int(12 * self.ui.scale)
+        y = rect.top  + int(10 * self.ui.scale)
+
+        surface.blit(txt_player, (x, y))
+        surface.blit(txt_turn,   (x, y + txt_player.get_height() + int(6 * self.ui.scale)))
 
     
     def draw_roster_panel(self):

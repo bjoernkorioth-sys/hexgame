@@ -6,6 +6,7 @@ class TurnManager:
         self.current_player = 0
         self.phase = "setup"  # can be "setup" or "play"
         self.units_placed = [0] * len(units_per_player)
+        self.turn_count = 1
 
     def next_turn(self):
         """Advance to the next player's turn, switching phase if setup is complete."""
