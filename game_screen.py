@@ -12,6 +12,7 @@ from unit_catalog import UNIT_CATALOG
 from turn_manager import TurnManager
 from ui.layout import UIAnchorLayout
 from ui.hud import UnitHUD
+from ui.deployment_roster import DeploymentRoster
 
 class GameScreen(Screen):
     def __init__(self, app, map_name, roster):
@@ -21,6 +22,7 @@ class GameScreen(Screen):
         self.font = pygame.font.SysFont("arial", 24)
         self.ui = UIAnchorLayout(self.screen.get_size())
         self.unit_hud = UnitHUD()
+        self.deployment_roster = DeploymentRoster()
 
         # External choices
         self.map_name = map_name
@@ -276,6 +278,24 @@ class GameScreen(Screen):
     def update(self, dt):
         self.move_timer += dt
 
+        if self.turns.phase == "setup":
+            player = self.turns.current_player
+
+            placed_units = {
+                u for u in self.units
+                if u.owner == player
+            }
+
+            units_to_deploy = [
+                u for u in self.player_units[player]
+                if u not in placed_units
+            ]
+
+            self.deployment_roster.set_units(units_to_deploy)
+        else:
+            self.deployment_roster.visible = False
+
+
         # --- HANDLE MOVEMENT ---
         if self.moving and self.move_path:
             if self.move_timer >= self.move_delay:
@@ -320,6 +340,7 @@ class GameScreen(Screen):
         self.draw_world(surface)
         self.draw_overlays(surface)
         self.draw_ui(surface)
+        self.deployment_roster.draw(surface, self.ui)
 
     def draw_world(self, surface):
         self.hexmap.draw()

@@ -195,3 +195,10 @@ UI_RADII = {
     "medium": 14,
     "large": 22,
 }
+
+DEPLOYMENT_ROSTER = {
+    "w": 0.28,   # 28% of screen width
+    "h": 0.30,   # 30% of screen height
+    "padding": 0.04,
+    "slot_h": 0.22,  # per unit row height (relative)
+}

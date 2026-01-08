@@ -37,6 +37,7 @@ class Unit:
         self.q = q
         self.r = r
         self.owner = owner
+        self.deployed = False
 
         # Core stats
         self.move_range = move_range
