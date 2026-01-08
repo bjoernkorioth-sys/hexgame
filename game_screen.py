@@ -22,6 +22,7 @@ class GameScreen(Screen):
         self.font = pygame.font.SysFont("arial", 24)
         self.ui = UIAnchorLayout(self.screen.get_size())
         self.unit_hud = UnitHUD()
+        self.hover_hud = UnitHUD()
         self.deployment_roster = DeploymentRoster()
 
         # External choices
@@ -50,6 +51,7 @@ class GameScreen(Screen):
             self.player_units.append(units)
 
         self.selected_unit = None
+        self.hovered_unit = None
         self.reachable_tiles = set()
         self.attackable_enemies = set()
         self.moving = False
@@ -75,8 +77,15 @@ class GameScreen(Screen):
         )
 
         self.ui.define(
-            "unit_hud",
-            anchor="top_right",
+            "selected_unit_hud",
+            anchor="bottom_left",
+            w=UNIT_HUD["w"],
+            h=UNIT_HUD["h"]
+        )
+
+        self.ui.define(
+            "hover_unit_hud",
+            anchor="bottom_right",
             w=UNIT_HUD["w"],
             h=UNIT_HUD["h"]
         )
@@ -166,7 +175,14 @@ class GameScreen(Screen):
             )
 
             self.ui.define(
-                "unit_hud",
+                "selected_unit_hud",
+                anchor="bottom_left",
+                w=UNIT_HUD["w"],
+                h=UNIT_HUD["h"]
+            )
+
+            self.ui.define(
+                "hover_unit_hud",
                 anchor="top_right",
                 w=UNIT_HUD["w"],
                 h=UNIT_HUD["h"]
@@ -295,6 +311,14 @@ class GameScreen(Screen):
         else:
             self.deployment_roster.visible = False
 
+        mx, my = pygame.mouse.get_pos()
+        wx, wy = self.camera.screen_to_world((mx, my))
+        q, r = self.hexmap.pixel_to_hex(wx, wy)
+
+        self.hovered_unit = next(
+            (u for u in self.units if (u.q, u.r) == (q, r)),
+            None
+        )
 
         # --- HANDLE MOVEMENT ---
         if self.moving and self.move_path:
@@ -388,9 +412,13 @@ class GameScreen(Screen):
         self.draw_turn_label(surface)
         self.draw_end_turn_button(surface)
 
-        if self.selected_unit:
-            rect = self.ui.get("unit_hud")
-            self.unit_hud.draw(surface, self.selected_unit, rect)
+        # Selected unit HUD (bottom-left)
+        rect = self.ui.get("selected_unit_hud")
+        self.unit_hud.draw(surface, self.selected_unit, rect)
+
+        # Hovered unit HUD (bottom-right)
+        rect = self.ui.get("hover_unit_hud")
+        self.hover_hud.draw(surface, self.hovered_unit, rect)
 
     def draw_end_turn_button(self, surface):
         rect = self.ui.get("end_turn")
